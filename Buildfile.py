@@ -2,7 +2,7 @@ import urllib.request
 import subprocess, os
 class main(BuildBase):
     SRC_FILES=["main.cpp"]
-    INCLUDE_PATHS=[get_dep_path("asio", "asio/include"),get_dep_path("boost ", "")]
+    INCLUDE_PATHS=[get_dep_path("asio", "asio/include"),get_dep_path("boost ", ""), os.path.join("external", "libusb","include")]
 
     OUTPUT_TYPE=EXE
 
@@ -17,6 +17,7 @@ class download_usb_ids(BuildBase):
 class parse_usb_ids(BuildBase):
     def build(cls):
         exec(open("parse.py","r").read())
+        
 
 class clone_libusb(BuildBase):
     def build(cls):

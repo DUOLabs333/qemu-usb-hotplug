@@ -1,3 +1,4 @@
+#include <shared_mutex>
 #include <string>
 #include <vector>
 #include <utility>
@@ -7,9 +8,9 @@
 #include <fcntl.h>
 #include <format>
 
-#include "usb_ids_json.h"
+#include "usb.ids.h"
 
-#include <boost/json.hpp>
+#include <boost/json/src.hpp>
 #include <asio.hpp>
 #include <libusb-1.0/libusb.h>
 
@@ -35,10 +36,58 @@ std::string mode; //"allow_list", only allowing what's on the list, and blocking
 boost::json::object config;
 
 asio::io_context context;
-asio::local::stream_protocol::socket socket(context);
+asio::local::stream_protocol::socket qemu_socket(context);
+std::mutex socket_mutex;
 
-void HandleRequest(libusb_hotplug_event event, uint16_t vendor_id, uint16_t product_id){
+void connectToQemu(){
+	asio::error_code ec;
+	while(true){
+		qemu_socket.connect(asio::local::stream_protocol::endpoint(SOCKET), ec);
+		if(!ec){
+			break;
+		}
+	}
+}
 
+void sendRequest(bool add, uint16_t vendor_id, uint16_t product_id){
+	std::unique_lock<std::mutex> lk(socket_mutex);
+	asio::error_code ec;
+	while(true){
+		asio::write(qemu_socket, asio::buffer(std::format("device_{} usb-host,vendorid={},productid={}\n", add ? "add" : "del", vendor_id, product_id)), ec);
+		if (!ec){
+			break;
+		}
+		connectToQemu();
+	}
+}
+void HandleEvent(libusb_hotplug_event event, uint16_t vendor_id, uint16_t product_id){
+	if (event==LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED){
+		bool match;
+		if(mode=="BLOCK"){
+			match=false;
+		}else{
+			match=true;
+		}
+
+		if(vendors.contains(vendor_id) || products.contains({vendor_id, product_id})){
+				sendRequest(match, vendor_id, product_id);
+		}else{
+				sendRequest(!match, vendor_id, product_id);
+		}
+			
+	}else{
+		sendRequest(false, vendor_id, product_id);
+	}
+
+}
+
+int USBCallBack(libusb_context *, libusb_device* device, libusb_hotplug_event event, void*){
+	struct libusb_device_descriptor descriptor;
+	libusb_get_device_descriptor(device, &descriptor);
+
+	std::thread(HandleEvent, event, descriptor.idVendor, descriptor.idProduct).detach();
+
+	return 0;
 }
 int main(int argc, char** argv){
 	auto config_ifstream=std::ifstream(CONFIG.c_str());
@@ -61,7 +110,7 @@ int main(int argc, char** argv){
 		config["list"]=boost::json::array();
 	}
 	
-	std::istringstream usb_ids_stream(std::move(std::string(usb_ids_json,usb_ids_json_len)));
+	std::istringstream usb_ids_stream(std::move(std::string(usb_ids_json,usb_ids_json+usb_ids_json_len)));
 	
 	std::error_code ec;
 	auto usb_ids=boost::json::value_to<std::vector<std::pair<std::string,usb_pair>>>(boost::json::parse(usb_ids_stream, ec));
@@ -87,11 +136,9 @@ int main(int argc, char** argv){
 		}
 	}
 	
-	asio::error_code _ec;
-	while(true){
-		socket.connect(asio::local::stream_protocol::endpoint(SOCKET), _ec);
-		if(!_ec){
-			break;
-		}
-	}
+	connectToQemu();
+	libusb_hotplug_register_callback(NULL, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, LIBUSB_HOTPLUG_ENUMERATE, LIBUSB_HOTPLUG_MATCH_ANY, LIBUSB_HOTPLUG_MATCH_ANY, LIBUSB_HOTPLUG_MATCH_ANY, USBCallBack, NULL, NULL);
+	std::promise<void>().get_future().wait();
+
+
 }
