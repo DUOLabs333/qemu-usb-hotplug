@@ -30,7 +30,7 @@ class libusb(BuildBase):
 
 class main(BuildBase):
     SRC_FILES=["main.cpp"]
-    INCLUDE_PATHS=[get_dep_path("asio", "asio/include"),get_dep_path("boost ", ""), os.path.join("external", "libusb","include")]
+    INCLUDE_PATHS=[get_dep_path("asio", "asio/include"),get_dep_path("boost"), os.path.join("external", "libusb")]
 
     OUTPUT_TYPE=EXE
 
@@ -38,6 +38,13 @@ class main(BuildBase):
 
     STATIC_LIBS=[libusb]
 
-    SHARED_LIBS=(["udev"] if PLATFORM=="linux" else []) #Due to libusb
     DEPENDENCIES=[usb_ids]
+
+    FRAMEWORKS=["CoreFoundation","IOKit", "Security"]
+
+    def __init__(self):
+
+        #Libraries required to build libusb
+        if PLATFORM=="linux":
+                self.SHARED_LIBS.append("udev")
 

@@ -13,7 +13,7 @@
 
 #include <boost/json/src.hpp>
 #include <asio.hpp>
-#include <libusb-1.0/libusb.h>
+#include <libusb/libusb.h>
 
 
 std::string getEnv(const char* _key, std::string _default){
