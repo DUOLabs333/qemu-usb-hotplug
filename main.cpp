@@ -156,8 +156,12 @@ int main(int argc, char** argv){
 	}
 	
 	connectToQemu();
+	libusb_init_context(NULL, NULL, 0);
 	libusb_hotplug_register_callback(NULL, LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED | LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT, LIBUSB_HOTPLUG_ENUMERATE, LIBUSB_HOTPLUG_MATCH_ANY, LIBUSB_HOTPLUG_MATCH_ANY, LIBUSB_HOTPLUG_MATCH_ANY, USBCallBack, NULL, NULL);
-	std::promise<void>().get_future().wait();
+	
+	while(true){
+		libusb_handle_events_completed(NULL, NULL);
+	}	
 
 
 }

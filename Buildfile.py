@@ -1,10 +1,6 @@
 import urllib.request
 import subprocess, os
 
-
-
-
-
 class usb_ids(BuildBase):
     def build(cls):
         if not os.path.exists("usb.ids"):
