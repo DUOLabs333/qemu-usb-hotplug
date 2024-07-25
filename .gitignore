@@ -1,3 +1,5 @@
 usb.ids*
 external/
 *.o
+qemu-usb-hotplug
+__pycache__/

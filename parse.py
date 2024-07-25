@@ -31,5 +31,9 @@ for i, line in enumerate(f.readlines()):
 
 f.close()
 
-f=open("usb_ids.json", "w+")
+f=open("usb.ids.json", "w+")
 json.dump(result, f)
+
+f.close()
+
+subprocess.run(["xxd", "-i", "usb.ids.json", "usb.ids.h"])

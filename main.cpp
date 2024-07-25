@@ -6,6 +6,7 @@
 #include <iostream>
 #include <set>
 #include <fcntl.h>
+
 #include <format>
 
 #include "usb.ids.h"
@@ -24,8 +25,8 @@ std::string getEnv(const char* _key, std::string _default){
 	}
 }
 
-auto SOCKET=getEnv("SOCKET", "./qemu-monitor.sock");
-auto CONFIG=getEnv("CONF_FILE", "./qemu-usb-hotplug.json");
+auto SOCKET=getEnv("QEMU_SOCKET", "./qemu-monitor.sock");
+auto CONFIG=getEnv("HOTPLUG_CONF_FILE", "./qemu-usb-hotplug.json");
 
 typedef std::pair<int, int> usb_pair;
 std::set<usb_pair> products;
@@ -46,6 +47,7 @@ void connectToQemu(){
 		if(!ec){
 			break;
 		}
+		std::cerr << std::format("Error! Can't connect to socket {} due to: {}", SOCKET, ec.message()) << std::endl;
 	}
 }
 
@@ -62,17 +64,17 @@ void sendRequest(bool add, uint16_t vendor_id, uint16_t product_id){
 }
 void HandleEvent(libusb_hotplug_event event, uint16_t vendor_id, uint16_t product_id){
 	if (event==LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED){
-		bool match;
+		bool match_action;
 		if(mode=="BLOCK"){
-			match=false;
+			match_action=false;
 		}else{
-			match=true;
+			match_action=true;
 		}
 
 		if(vendors.contains(vendor_id) || products.contains({vendor_id, product_id})){
-				sendRequest(match, vendor_id, product_id);
+				sendRequest(match_action, vendor_id, product_id);
 		}else{
-				sendRequest(!match, vendor_id, product_id);
+				sendRequest(!match_action, vendor_id, product_id);
 		}
 			
 	}else{
@@ -98,7 +100,7 @@ int main(int argc, char** argv){
 		std::error_code ec;
 		auto parsed=boost::json::parse(config_ifstream, ec);
 		if(ec){
-			std::cout << std::format("Warning! Can not read config file {} due to: {}", CONFIG, ec.message()) << std::endl;
+			std::cerr << std::format("Warning! Can not read config file {} due to: {}", CONFIG, ec.message()) << std::endl;
 		}else{
 			config=parsed.as_object();
 		}
@@ -118,10 +120,10 @@ int main(int argc, char** argv){
 	mode=boost::json::value_to<std::string>(config.at("mode"));
 
 	for (auto& val: config["list"].as_array()){
-		if(val.is_string()){
-			auto val_str=boost::json::value_to<std::string>(val);
+		if(val.is_string()){ //Substring of the form "Sandisk ..."
+			auto val_str=val.as_string();
 			for(auto& usb_id: usb_ids){
-				if((usb_id.first.find(val_str) != std::string::npos) && !vendors.contains(usb_id.second.first)){
+				if((usb_id.first.find(val_str.c_str()) != std::string::npos) && !vendors.contains(usb_id.second.first)){
 					if (usb_id.second.second==-1){
 						vendors.insert(usb_id.second.first);
 					}else{
@@ -129,10 +131,27 @@ int main(int argc, char** argv){
 					}
 				}
 			}
-		}else if (val.is_uint64()){
-			vendors.insert(val.as_uint64());
-		}else{
-			products.insert(boost::json::value_to<usb_pair>(val));
+		}else {
+			auto val_arr=val.as_array(); //[...,...]
+			std::array<int, 2> usb_id;
+			for(int i=0; i< 2; i++){
+				if(val_arr[i].is_string()){ //Hex string of the form "0xaaa"
+					usb_id[i]=std::strtoul(val_arr[i].as_string().c_str(), NULL, 0);
+					
+				}else if(val_arr[i].is_uint64()){
+					usb_id[i]=val_arr[i].as_uint64();
+				}else{ // [..., -1]
+					usb_id[1]=-1;
+					
+				}
+					
+			}
+			if (usb_id[1]==-1){
+				vendors.insert(usb_id[0]);
+			}else{
+				products.insert({usb_id[0], usb_id[1]});
+			}
+
 		}
 	}
 	
