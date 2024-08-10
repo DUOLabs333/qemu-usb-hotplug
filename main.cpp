@@ -54,8 +54,15 @@ void connectToQemu(){
 void sendRequest(bool add, uint16_t vendor_id, uint16_t product_id){
 	std::unique_lock<std::mutex> lk(socket_mutex);
 	asio::error_code ec;
+	auto id=std::format("{}-{}", vendor_id, product_id);
 	while(true){
-		asio::write(qemu_socket, asio::buffer(std::format("device_{} usb-host,vendorid={},productid={}\n", add ? "add" : "del", vendor_id, product_id)), ec);
+		std::string command;
+		if (add){
+			command=std::format("device_add usb-host,vendorid={},productid={},id={}", vendor_id, product_id, id);
+		}else{
+			command=std::format("device_del {}", id);
+		}
+		asio::write(qemu_socket, asio::buffer(command+"\n"), ec);
 		if (!ec){
 			break;
 		}
