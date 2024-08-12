@@ -54,7 +54,7 @@ void connectToQemu(){
 void sendRequest(bool add, uint16_t vendor_id, uint16_t product_id){
 	std::unique_lock<std::mutex> lk(socket_mutex);
 	asio::error_code ec;
-	auto id=std::format("{}-{}", vendor_id, product_id);
+	auto id=std::format("hotplug-{}-{}", vendor_id, product_id);
 	while(true){
 		std::string command;
 		if (add){
